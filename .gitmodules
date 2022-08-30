@@ -1,3 +1,9 @@
 [submodule "rootnet"]
 	path = rootnet
 	url = https://github.com/kanaru0928/3DTracking_Rootnet.git
+[submodule "posenet"]
+	path = posenet
+	url = https://github.com/kanaru0928/3DTracking_PoseNet.git
+[submodule "plugins"]
+	path = plugins
+	url = https://github.com/kanaru0928/3DTracking_Plugin.git
