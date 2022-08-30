@@ -161,3 +161,12 @@ rootnet/
 app/
 media/
 runs/
+vector.py
+test.py
+test.jpg
+mincostflow.py
+error.log
+camera_test.py
+bbox.png
+3dpose.png
+joints.txt
