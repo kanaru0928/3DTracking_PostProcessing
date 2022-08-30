@@ -1,0 +1,3 @@
+[submodule "rootnet"]
+	path = rootnet
+	url = https://github.com/kanaru0928/3DTracking_Rootnet.git
