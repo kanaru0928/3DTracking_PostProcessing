@@ -15,12 +15,39 @@ logging.basicConfig(format='[%(levelname)s] %(asctime)s: %(message)s', level=log
 logger = logging.getLogger(__name__)
 
 class JointInfo:
+    """関節情報を取り扱うクラス
+
+    Attributes
+    ----------
+    joints : np.ndarray
+        各関節のベクトル情報
+    root_pos : np.ndarray
+        人物の中心位置
+    root_rot : np.ndarray
+        人物の向き
+        
+    Notes
+    -----
+    簡単のために、ほとんどの場合の人数は過不足にかかわらず `MAX_PEOPLE` に統一される。
+    """
+    
     FORMAT_VERSION = 0x01
     NUM_JOINT = 21
     MAX_PEOPLE = 5
     
     def __init__(self, joints: np.ndarray=np.zeros((MAX_PEOPLE, NUM_JOINT, 3)), 
             root_pos: np.ndarray=np.zeros((MAX_PEOPLE, 3)), root_rot: np.ndarray=np.zeros((MAX_PEOPLE,))) -> None:
+        """コンストラクタ
+
+        Parameters
+        ----------
+        joints : np.ndarray, optional
+            各関節のベクトル情報, by default np.zeros((MAX_PEOPLE, NUM_JOINT, 3))
+        root_pos : np.ndarray, optional
+            人物の中心位置, by default np.zeros((MAX_PEOPLE, 3))
+        root_rot : np.ndarray, optional
+            人物の向き, by default np.zeros((MAX_PEOPLE,))
+        """
         self.joints = joints.copy()
         self.joints.resize(self.MAX_PEOPLE, self.NUM_JOINT, 3, refcheck=False)
         self.root_pos = root_pos.copy()
@@ -34,6 +61,13 @@ class JointInfo:
         assert self.MAX_PEOPLE == len(self.root_rot)
     
     def to_bytes(self) -> bytes:
+        """関節情報をバイト列に変換
+
+        Returns
+        -------
+        bytes
+            関節情報を表すバイト列
+        """
         self.check_init()
         ret = struct.pack('<b', self.FORMAT_VERSION)
         ret += struct.pack('<b', self.MAX_PEOPLE)
@@ -76,6 +110,22 @@ class JointInfo:
     
     @staticmethod
     def from_bytes(byte: bytes):
+        """バイト列から関節情報を生成
+
+        Parameters
+        ----------
+        byte : bytes
+            関節情報を表すバイト列
+
+        Returns
+        -------
+        JointInfo
+            解析された関節情報
+            
+        See Also
+        --------
+        フォーマットバージョンが0x01の場合は関数 `parse_bytes1` を参照
+        """
         format_ver = byte[0]
         if format_ver == 0x01:
             ret = JointInfo.parse_bytes1(byte)
@@ -127,13 +177,44 @@ class JointInfo:
         return self * (1 / other)
 
 class InterpolationFunction:
+    """補間関数を生成するクラス
+    
+    Attributes
+    ----------
+    acceleration : JointInfo
+        計算に用いる関節の加速度
+    velocity : JointInfo
+        計算に用いる関節の速度
+    """
+    
     k = 4e-2
     
     def __init__(self, acceleration: JointInfo, velocity: JointInfo):
+        """コンストラクタ
+
+        Parameters
+        ----------
+        acceleration : JointInfo
+            加速度
+        velocity : JointInfo
+            初速度
+        """
         self.acceleration = acceleration
         self.velocity = velocity
         
     def getVelocity(self, span):
+        """速度を返す関数
+
+        Parameters
+        ----------
+        span : float
+            返す速度の秒数
+
+        Returns
+        -------
+        JointInfo
+            速度
+        """
         if(Config.interpolationType == InterpolationType.ACCELERATION):
             ### 等加速度補間
             ret = self.velocity + span * self.acceleration
@@ -154,6 +235,18 @@ class InterpolationFunction:
         return ret
     
     def getDisplacement(self, span):
+        """変位を返す関数
+
+        Parameters
+        ----------
+        span : float
+            返す変位の秒数
+
+        Returns
+        -------
+        JointInfo
+            変位
+        """
         if(Config.interpolationType == InterpolationType.ACCELERATION):
             ### 等加速度補間
             ret = self.velocity * span + self.acceleration * (span * span / 2)
@@ -170,7 +263,37 @@ class InterpolationFunction:
         return ret
 
 class JointVelocity:
+    """関節の速度と加速度を持つクラス
+    
+    Attributes
+    ----------
+    t1 : float
+        移動時間
+    time : float
+        インスタンスが作成された時刻
+    velocity : JointInfo
+        関節の(初)速度
+    acceleration : JointInfo
+        関節の加速度
+    normalFunction : InterpolationFunction
+        通常時に用いる関数
+    velocityLast : JointInfo
+        `t1` 秒後の速度
+    displacementLast : JointInfo
+        `t1` 秒後の変位
+    """
     def __init__(self, initialVelocity: JointInfo = JointInfo(), acceleration: JointInfo = JointInfo(), t1: float = 0) -> None:
+        """コンストラクタ
+
+        Parameters
+        ----------
+        initialVelocity : JointInfo, optional
+            関節の(初)速度, by default JointInfo()
+        acceleration : JointInfo, optional
+            関節の加速度, by default JointInfo()
+        t1 : float, optional
+            移動時間, by default 0
+        """
         self.t1 = t1
         self.time = time.time()
         self.velocity = initialVelocity
@@ -181,6 +304,18 @@ class JointVelocity:
         self.displacementLast = self.getDisplacementAt(t1)
     
     def getVelocityAt(self, span) -> JointInfo:
+        """指定した時間の速度を取得
+
+        Parameters
+        ----------
+        span : float
+            時間
+
+        Returns
+        -------
+        JointInfo
+            取得した速度
+        """
         if(span <= self.t1):
             ret = self.normalFunction.getVelocity(span)
         elif(Config.isPowerReleaseMode):
@@ -193,6 +328,18 @@ class JointVelocity:
         return ret
         
     def getDisplacementAt(self, span) -> JointInfo:
+        """指定した時間の変位を取得
+
+        Parameters
+        ----------
+        span : float
+            時間
+
+        Returns
+        -------
+        JointInfo
+            取得した変位
+        """
         if(span <= self.t1):
             ret = self.normalFunction.getDisplacement(span)
         elif(Config.isPowerReleaseMode):
@@ -206,6 +353,22 @@ class JointVelocity:
     
     @staticmethod
     def getAcceleration(delta: JointInfo, initialVelocity: JointInfo, duration: float) -> JointInfo:
+        """条件から加速度を計算
+
+        Parameters
+        ----------
+        delta : JointInfo
+            フレーム間の変位の差
+        initialVelocity : JointInfo
+            関節の初速度
+        duration : float
+            移動時間
+
+        Returns
+        -------
+        JointInfo
+            加速度
+        """
         if(Config.interpolationType == InterpolationType.ACCELERATION):
             ### 等加速度補間
             acceleration = 2 * (delta - initialVelocity * duration) / duration ** 2
@@ -223,6 +386,8 @@ class JointVelocity:
         return acceleration
     
 class Edge:
+    """ネットワークフロー用の構造体
+    """
     def __init__(self, to, cap, cost, rev):
         self.to = to
         self.cap = cap
@@ -230,13 +395,36 @@ class Edge:
         self.rev = rev
 
 class JointHandler:
+    """関節の処理を行うクラス
+    
+    Attributes
+    ----------
+    joints : JointInfo
+        最新フレームの関節位置
+    velocity : JointInfo
+        最新フレームの速度
+    """
     DISPLACEMENT_SKIP_THRESHOLD = 1000
     
     def __init__(self) -> None:
+        """コンストラクタ
+        """
         self.joints = JointInfo()
         self.velocity = JointVelocity()
         
     def get_joint(self, cur_time=None) -> JointInfo:
+        """関節を処理して返す
+
+        Parameters
+        ----------
+        cur_time : float, optional
+            取得する関節の時刻, by default None
+
+        Returns
+        -------
+        JointInfo
+            処理した関節情報
+        """
         if cur_time is None:
             cur_time = time.time()
         t = cur_time - self.velocity.time
@@ -268,6 +456,25 @@ class JointHandler:
         # return JointInfo(np.array(new_joint), np.array(new_pos), np.array(new_rot))
     
     def swapJoint(self, oldJoint: JointInfo, newJoint: JointInfo):
+        """人物対応に基づく関節の入れ替え
+
+        Parameters
+        ----------
+        oldJoint : JointInfo
+            前フレームの関節位置
+        newJoint : JointInfo
+            現在フレームの関節位置
+
+        Returns
+        -------
+        JointInfo
+            入れ替え後の関節位置
+
+        Raises
+        ------
+        Exception
+            グラフ作成時のエラー
+        """
         oldRootPos = oldJoint.root_pos
         newRootPos = newJoint.root_pos
         
@@ -333,6 +540,18 @@ class JointHandler:
         return JointInfo(np.array(retJoint), np.array(retRootPos), np.array(retRootRot))
     
     def rotateY(self, deg):
+        """Y軸回転の3次元回転行列を取得
+
+        Parameters
+        ----------
+        deg : float
+            角度(ラジアン)
+
+        Returns
+        -------
+        np.ndarray
+            回転行列
+        """
         C = np.cos(deg)
         S = np.sin(deg)
         
@@ -344,6 +563,18 @@ class JointHandler:
         return Ry
     
     def convertToRelative(self, jointInfo: JointInfo):
+        """関節を相対座標に変換
+
+        Parameters
+        ----------
+        jointInfo : JointInfo
+            変換する関節
+
+        Returns
+        -------
+        JointInfo
+            変換後の関節
+        """
         joints = jointInfo.joints
         num_joint = JointInfo.NUM_JOINT
         num_person = len(joints)
@@ -377,6 +608,13 @@ class JointHandler:
         return JointInfo(rel_vec, jointInfo.root_pos, jointInfo.root_rot)
     
     def set_joint(self, joints: JointInfo):
+        """関節を更新
+
+        Parameters
+        ----------
+        joints : JointInfo
+            新しい関節
+        """
         # pre_roots = self.joints[0].root_pos
         # post_roots = joints.root_pos
         # joint_v = JointVelocity()
@@ -442,6 +680,22 @@ class JointHandler:
 INF = 1e9
 
 def minCostFlow(g, flow):
+    """最小費用流問題を解く
+
+    Parameters
+    ----------
+    g : array_like
+        グラフ(隣接リスト)
+    flow : int
+        流量
+
+    Returns
+    -------
+    g : array_like
+        フローを流した後のグラフ
+    res : int
+        最小費用
+    """
     vertexSize = len(g)
     res = 0
     h = [0] * vertexSize

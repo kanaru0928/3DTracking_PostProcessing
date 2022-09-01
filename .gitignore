@@ -168,3 +168,8 @@ camera_test.py
 bbox.png
 3dpose.png
 joints.txt
+
+source/
+build/
+make.bat
+Makefile

@@ -46,7 +46,35 @@ def rotate_y(vec:np.ndarray, theta:float) -> np.ndarray:
     return ret
 
 class PoseEstimation():
+    """姿勢推定を行う(画像処理部)
+    
+    Attributes
+    ----------
+    num_joint : int
+        1人あたりの関節の数
+    device : str
+        処理を行うデバイス
+    root_joint : int
+        ルート関節のインデックス
+    root : list[int]
+        各関節の親関節
+    tree : list[list[]]
+        各関節の子関節
+    bbox_factroy : BBoxEstimation
+        BoundingBoxを推定するクラスインスタンス (DetectNet)
+    root_factory : rootnet.Rootnet
+        人物の中心位置を推定するクラスインスタンス (RootNet)
+    pose_factory : posenet.Posenet
+        人物の相対関節座標を推定するクラスインスタンス (PoseNet)
+    """
     def __init__(self, device=None) -> None:
+        """コンストラクタ
+
+        Parameters
+        ----------
+        device : str, optional
+            推定を行うデバイス, by default None
+        """
         self.num_joint = 21
         if device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -66,6 +94,18 @@ class PoseEstimation():
     
     @staticmethod
     def conv_to_euler(rel_pos : np.ndarray):
+        """ベクトルをオイラー角へ変換
+
+        Parameters
+        ----------
+        rel_pos : np.ndarray
+            変換するベクトル
+
+        Returns
+        -------
+        np.ndarray
+            z-y-xオイラー角
+        """
         ret = np.zeros(3)
         
         # # With rotate matrix
@@ -97,6 +137,18 @@ class PoseEstimation():
         return ret
     
     def gen_angle(self, joints):
+        """関節位置のリストから関節の向きを表すベクトルと体の向きを計算
+
+        Parameters
+        ----------
+        joints : array_like
+            関節位置のリスト
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            関節の向きを表すベクトル, 体の向き
+        """
         num_joint = self.num_joint
         num_person = len(joints)
         # angle = np.zeros((num_person, num_joint, 3))
@@ -134,11 +186,28 @@ class PoseEstimation():
                 
                 for j in self.tree[idx]:
                     que.put(j)
-            # abs_list = [2, 5, 9, 12, 15]
-            # rel_angle[k][abs_list] = angle[k][abs_list]
+
         return rel_vec, np.array(root_rot)
     
     def estimation(self, img, vis1 = False, vis2 = False, vis3 = False):
+        """姿勢を推定
+
+        Parameters
+        ----------
+        img : np.ndarray
+            推定する画像 (OpenCVの画像)
+        vis1 : bool, optional
+            DetectNetの結果を出力, by default False
+        vis2 : bool, optional
+            RootNetの結果を出力, by default False
+        vis3 : bool, optional
+            PoseNetの結果を出力, by default False
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray, np.ndarray]
+            関節情報, 人物の向き
+        """
         start_all = time.time()
         start = time.time()
         bbox_list = self.bbox_factory.get_bbox(img, vis1)
@@ -157,7 +226,7 @@ class PoseEstimation():
         joint3d[:,:,1] = -joint3d[:,:,1]
         # joint3d[:,:,2] = -joint3d[:,:,2]
         
-        angles, root_rot = self.gen_angle(joint3d)
+        _, root_rot = self.gen_angle(joint3d)
         # logger.debug(joint3d.tolist())
         # logger.debug(angles.tolist())
         

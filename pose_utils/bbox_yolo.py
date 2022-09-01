@@ -14,7 +14,24 @@ logging.basicConfig(format='[%(levelname)s] %(asctime)s: %(message)s', level=log
 logger = logging.getLogger(__name__)
 
 class BBoxEstimation:
+    """YOLOv5で推定を行うDetectNet
+    
+    Attributes
+    ----------
+    device : str
+        処理を行うデバイス
+    model : nn.Module
+        処理に用いるモデル
+    """
+    
     def __init__(self, device=None) -> None:
+        """コンストラクタ
+
+        Parameters
+        ----------
+        device : str, optional
+            処理に用いるモデル, by default None
+        """
         model = torch.hub.load('ultralytics/yolov5', Config.detectNet)
         if device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -24,6 +41,20 @@ class BBoxEstimation:
         self.model = model.to(self.device)
             
     def get_bbox(self, img_bgr, vis=False) -> list:
+        """BoundingBoxを取得
+
+        Parameters
+        ----------
+        img_bgr : np.ndarray
+            OpenCVで取得した画像 (BGR)
+        vis : bool, optional
+            結果を画像出力, by default False
+
+        Returns
+        -------
+        list
+            BoudingBoxのリスト
+        """
         mask_model = self.model
         
         width, height, _ = img_bgr.shape

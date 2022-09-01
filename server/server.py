@@ -31,6 +31,18 @@ send_continue = False
 factory = PoseEstimation()
 
 def get_joint(file_path=None):
+    """画像から間接情報を取得
+
+    Parameters
+    ----------
+    file_path : str, optional
+        画像のファイルパス 指定しない場合はwebカメラ, by default None
+
+    Returns
+    -------
+    JointInfo
+        取得した間接情報
+    """
     if file_path is not None:
         img = cv2.imread(file_path)
     else:
@@ -43,6 +55,13 @@ def get_joint(file_path=None):
     return JointInfo(angles, root_pos, root_rot)
 
 def get_estimated_data(client : socket.socket):
+    """間接情報をTCPで取得し、now_jointに格納
+
+    Parameters
+    ----------
+    client : socket.socket
+        受け取り元ソケット
+    """
     global now_joint
     res = client.recv(2048)
     now_joint = res
@@ -51,6 +70,13 @@ def get_estimated_data(client : socket.socket):
     print('set joint')
 
 def send_joint(client : socket.socket):
+    """間接を補間して送信
+
+    Parameters
+    ----------
+    client : socket.socket
+        送信先ソケット
+    """
     # global now_joint
     joint = handler.get_joint()
     buf = joint.to_bytes()
@@ -60,6 +86,13 @@ def send_joint(client : socket.socket):
     print('send joint')
 
 def send_joint_loop(client: socket.socket):
+    """補間されていない間接情報を連続的に送信
+
+    Parameters
+    ----------
+    client : socket.socket
+        送り先のソケット
+    """
     global send_continue
     while send_continue:
         joints = get_joint()
@@ -71,6 +104,8 @@ def send_joint_loop(client: socket.socket):
             break
 
 def estimate_loop():
+    """推定・補間を行い、関節を連続的に送信
+    """
     global send_continue
     while send_continue:
         start = time.time()
@@ -80,6 +115,13 @@ def estimate_loop():
         print('FPS2:{}'.format(1 / (time.time() - start)))
 
 def streaming(client : socket.socket):
+    """ソケットとの通信フォーマットを定義
+
+    Parameters
+    ----------
+    client : socket.socket
+        やり取りするソケット
+    """
     global send_continue
     task: threading.Thread = None
     while True:
@@ -88,18 +130,23 @@ def streaming(client : socket.socket):
             print('recive id:{}'.format([hex(x) for x in res_id]))
             res_id = res_id.decode()
             if(res_id == '101'):
+                # 101: 関節情報をソケットから取得(非推奨)
                 client.send(b'101')
                 get_estimated_data(client)
             elif(res_id == '102'):
+                # 102: サーバーの保持している関節情報を補間して送信
                 send_joint(client)
             elif(res_id == '104'):
+                # 104: サーバーの保持している関節情報を連続送信(非推奨)
                 send_continue = True
                 task = threading.Thread(target=send_joint_loop, args=[client])
                 task.setDaemon(True)
                 task.start()
             elif(res_id == '105'):
+                # 105: 連続送信を停止
                 send_continue = False
             elif(res_id == '106'):
+                # 106: サーバーの保持している関節情報をそのまま送信
                 send_continue = True
                 task = threading.Thread(target=estimate_loop)
                 task.setDaemon(True)

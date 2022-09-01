@@ -12,7 +12,24 @@ from copy import copy
 logger = logging.getLogger(__name__)
 
 class BBoxEstimation:
+    """Mask R-CNNで推定を行うDetectNet
+    
+    Attributes
+    ----------
+    model : nn.Module
+        処理に用いるモデル
+    device : str
+        処理を行うデバイス
+    """
+    
     def __init__(self, device=None) -> None:
+        """コンストラクタ
+
+        Parameters
+        ----------
+        device : str, optional
+            処理を行うデバイス, by default None
+        """
         # model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
         model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
         # num_classes = 2
@@ -25,6 +42,20 @@ class BBoxEstimation:
             self.device = device
             
     def get_bbox(self, img_bgr, vis=False) -> list:
+        """BoundingBoxを取得
+
+        Parameters
+        ----------
+        img_bgr : np.ndarray
+            OpenCVで取得した画像
+        vis : bool, optional
+            結果を画像出力, by default False
+
+        Returns
+        -------
+        list
+            BoundingBoxのリスト
+        """
         mask_model = self.model
         device = self.device
         
